@@ -1,0 +1,49 @@
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  push:
+    branches:
+      - 'main'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - 'main'
+
+jobs:
+  set-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      app_environment: ${{ steps.set-env-vars.outputs.APP_ENVIRONMENT }}
+    steps:
+      - name: Set environment
+        id: set-env-vars
+        run: |
+          if [[ "${{ github.ref }}" == *"-dev-"* ]]; then
+            echo "APP_ENVIRONMENT=dev" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == *"-qa-"* ]]; then
+            echo "APP_ENVIRONMENT=qa" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == *"-prod-"* ]]; then
+            echo "APP_ENVIRONMENT=prod" >> $GITHUB_OUTPUT
+          else
+            echo "APP_ENVIRONMENT=dev" >> $GITHUB_OUTPUT  # Default to dev
+          fi
+
+  build-and-deploy:
+    needs: 
+      - set-environment
+    uses: dastechnology/tlz-infra-pipelines/.github/workflows/called-workflow.yml@main
+    with:
+      DOCKERFILE_PATH: './Dockerfile'
+      IMAGE_REPOSITORY: 'radar-react-splitter-layout'
+      NAMESPACE: 'social-logix'
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID_NEW }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID_NEW }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID_NEW }}
+      APP_ENVIRONMENT: ${{ needs.set-environment.outputs.app_environment }}
+      #BUILD_ARGS: '--build-arg ARG1=value1 --build-arg ARG2=value2'
+      BUILD_OS: 'ubuntu-latest'
+      GIT_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      MGMT: 'mgmt'
